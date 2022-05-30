@@ -171,7 +171,7 @@ def get_datasets(config):
   """Returns `ds_train, ds_test` for specified `config`."""
 
   train_dir = os.path.join(config.dataset, 'train')
-  test_dir = os.path.join(config.dataset, 'test')
+  test_dir = os.path.join(config.dataset, 'val')
   if not os.path.isdir(train_dir):
     raise ValueError('Expected to find directories"{}" and "{}"'.format(
         train_dir,
@@ -182,7 +182,7 @@ def get_datasets(config):
   ds_train = get_data_from_directory(
       config=config, directory=train_dir, mode='train')
   ds_test = get_data_from_directory(
-      config=config, directory=test_dir, mode='test')
+      config=config, directory=test_dir, mode='val')
   return ds_train, ds_test
 
 
@@ -199,10 +199,9 @@ def get_data_from_directory(*, config, directory, mode):
           value_buf = f.read()
       return imfrombytes(value_buf, float32=True)
   
-  def _pp(inp_data, gt_data):
+  def _pp(data):
     return dict(
-        input_image=inp_data,
-        gt_image=gt_data,
+        image = data,
     )
 
   image_decoder = lambda path: get_image(path)
@@ -214,7 +213,7 @@ def get_data_from_directory(*, config, directory, mode):
       num_classes=dataset_info['num_classes'],
       image_decoder=image_decoder,
       repeats=None if mode == 'train' else 1,
-      batch_size=config.batch_eval if mode == 'test' else config.batch,
+      batch_size=config.batch_eval if mode == 'val' else config.batch,
       image_size=config.pp['crop'],
       scale = config.scale,
       shuffle_buffer=min(dataset_info['num_examples'], config.shuffle_buffer),
@@ -255,7 +254,7 @@ def get_data(*,
 
   def _pp(inp_data, gt_data):
 
-    ipt_im, gt_im = image_decoder(ipt_data['image']), image_decoder(gt_data['image'])
+    ipt_im, gt_im = image_decoder(os.join(ipt_data['image'], 'input_crops')), image_decoder(os.join(gt_data['image'], 'gt_crops'))
     if ipt_im.shape[-1] == 1: im = np.concatenate([im, im, im], axis=-1)
     if gt_im.shape[-1] == 1: gt_im = np.concatenate([gt_im, gt_im, gt_im], axis=-1)
 
@@ -263,8 +262,8 @@ def get_data(*,
       channels = ipt_im.shape[-1]
       gt_im, ipt_im = padding(gt_im, ipt_im, image_size)
       gt_im, ipt_im = paired_random_crop(gt_im, ipt_im, image_size, scale)
-      gt_im, ipt_im = augment([img_gt, img_lq], self.opt['use_flip'],
-                          self.opt['use_rot'])
+      #gt_im, ipt_im = augment([img_gt, img_lq], self.opt['use_flip'],
+      #                    self.opt['use_rot'])
       
     gt_im, ipt_im = img2tensor([gt_im, ipt_im], bgr2rgb=True, float32=True)
     return {'gt_image': gt_im, 'input_image': ipt_im}

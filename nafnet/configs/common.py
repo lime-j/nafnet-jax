@@ -25,13 +25,10 @@ def get_config():
   # Where to search for pretrained ViT models.
   # Can be downloaded from gs://vit_models/imagenet21k
   config.pretrained_dir = '.'
-  # Which dataset to finetune on. This can be the name of a tfds dataset
-  # (see https://www.tensorflow.org/datasets/catalog/overview), or the path to
-  # a directory with the following structure ($filename can be arbitrary):
-  # "{train,test}/$class_name/$filename.jpg"
-  config.dataset = ''
+
+  config.dataset = 'SIDD'
   # Path to manually downloaded dataset
-  config.tfds_manual_dir = None
+  config.tfds_manual_dir = './dataset_unzip/SIDD_Medium_Srgb/'
   # Path to tensorflow_datasets directory
   config.tfds_data_dir = None
   # Number of steps; determined by hyper module if not specified.
@@ -40,20 +37,20 @@ def get_config():
   # Resizes global gradients.
   config.grad_norm_clip = 1.0
   # Datatype to use for momentum state ("bfloat16" or "float32").
-  config.optim_dtype = 'bfloat16'
+  config.optim_dtype = 'float32'
   # Accumulate gradients over multiple steps to save on memory.
-  config.accum_steps = 8
+  config.accum_steps = 1
 
   # Batch size for training.
-  config.batch = 512
+  config.batch = 4
   # Batch size for evaluation.
-  config.batch_eval = 512
+  config.batch_eval = 1
   # Shuffle buffer size.
   config.shuffle_buffer = 50_000
   # Run prediction on validation set every so many steps
-  config.eval_every = 100
+  config.eval_every = 1_000
   # Log progress every so many steps.
-  config.progress_every = 10
+  config.progress_every = 1_0000
   # How often to write checkpoints. Specifying 0 disables checkpointing.
   config.checkpoint_every = 1_000
 
@@ -83,26 +80,12 @@ def get_config():
 
 # We leave out a subset of training for validation purposes (if needed).
 DATASET_PRESETS = {
-    'cifar10': ml_collections.ConfigDict(
-        {'total_steps': 10_000,
+    'SIDD': ml_collections.ConfigDict(
+        {'total_steps': 200_000,
          'pp': ml_collections.ConfigDict(
-             {'train': 'train[:98%]',
+             {'train': 'train',
               'test': 'test',
-              'crop': 384})
-         }),
-    'cifar100': ml_collections.ConfigDict(
-        {'total_steps': 10_000,
-         'pp': ml_collections.ConfigDict(
-             {'train': 'train[:98%]',
-              'test': 'test',
-              'crop': 384})
-         }),
-    'imagenet2012': ml_collections.ConfigDict(
-        {'total_steps': 20_000,
-         'pp': ml_collections.ConfigDict(
-             {'train': 'train[:99%]',
-              'test': 'validation',
-              'crop': 384})
+              'crop': 256})
          }),
 }
 

@@ -22,7 +22,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from vit_jax import models
+from nafnet import models
 
 
 def _traverse_with_names(tree):

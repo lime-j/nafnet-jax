@@ -31,11 +31,11 @@ from skimage.metrics import mean_squared_error as compare_mse
 from skimage.metrics import peak_signal_noise_ratio as compare_psnr
 from skimage.metrics import structural_similarity as compare_ssim
 
-import checkpoint
-import input_pipeline
-import models
-import momentum_clip
-import utils
+from nafnet import checkpoint
+from nafnet import input_pipeline
+from nafnet import models
+from nafnet import momentum_clip
+from nafnet import utils
 
 
 def make_update_fn(*, apply_fn, accum_steps, lr_fn):
