@@ -27,11 +27,15 @@ import ml_collections
 import numpy as np
 import tensorflow as tf
 
-from vit_jax import checkpoint
-from vit_jax import input_pipeline
-from vit_jax import models
-from vit_jax import momentum_clip
-from vit_jax import utils
+from skimage.metrics import mean_squared_error as compare_mse
+from skimage.metrics import peak_signal_noise_ratio as compare_psnr
+from skimage.metrics import structural_similarity as compare_ssim
+
+import checkpoint
+import input_pipeline
+import models
+import momentum_clip
+import utils
 
 
 def make_update_fn(*, apply_fn, accum_steps, lr_fn):
@@ -45,20 +49,24 @@ def make_update_fn(*, apply_fn, accum_steps, lr_fn):
     # each with multiple accelerators).
     dropout_rng = jax.random.fold_in(rng, jax.lax.axis_index('batch'))
 
-    def cross_entropy_loss(*, logits, labels):
-      logp = jax.nn.log_softmax(logits)
-      return -jnp.mean(jnp.sum(logp * labels, axis=1))
-
-    def loss_fn(params, images, labels):
-      logits = apply_fn(
+    
+    def l1_loss(predictions: jnp.ndarray, targets: jnp.ndarray) -> jnp.ndarray:
+      return jnp.mean(jnp.abs(targets - predictions))
+    
+    def psnr_loss(predictions: jnp.ndarray, targets: jnp.ndarray) -> jnp.ndarray:
+      return 10 * jnp.log10(1 / l2_loss(predictions, targets))
+    
+    def loss_fn(params, images, gt_images):
+      result_image = apply_fn(
           dict(params=params),
           rngs=dict(dropout=dropout_rng),
           inputs=images,
           train=True)
-      return cross_entropy_loss(logits=logits, labels=labels)
+      
+      return l1_loss(result_image, gt_images)
 
     l, g = utils.accumulate_gradient(
-        jax.value_and_grad(loss_fn), opt.target, batch['image'], batch['label'],
+        jax.value_and_grad(loss_fn), opt.target, batch['input_image'], batch['gt_image'],
         accum_steps)
     g = jax.tree_map(lambda x: jax.lax.pmean(x, axis_name='batch'), g)
     l = jax.lax.pmean(l, axis_name='batch')
@@ -80,54 +88,21 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
   logging.info(ds_train)
   logging.info(ds_test)
 
-  # Build VisionTransformer architecture
-  model_cls = {'ViT': models.VisionTransformer,
-               'Mixer': models.MlpMixer}[config.get('model_type', 'ViT')]
-  model = model_cls(num_classes=dataset_info['num_classes'], **config.model)
+  model_cls = {'NAFNet': models.NAFNet,
+               }[config.get('model_type', 'NAFNet')]
+  model = model_cls(**config.model)
 
   def init_model():
     return model.init(
         jax.random.PRNGKey(0),
         # Discard the "num_local_devices" dimension for initialization.
-        jnp.ones(batch['image'].shape[1:], batch['image'].dtype.name),
+        jnp.ones(batch['gt_image'].shape[1:], batch['gt_image'].dtype.name),
         train=False)
 
   # Use JIT to make sure params reside in CPU memory.
   variables = jax.jit(init_model, backend='cpu')()
 
-  model_or_filename = config.get('model_or_filename')
-  if model_or_filename:
-    # Loading model from repo published with  "How to train your ViT? Data,
-    # Augmentation, and Regularization in Vision Transformers" paper.
-    # https://arxiv.org/abs/2106.10270
-    if '-' in model_or_filename:
-      filename = model_or_filename
-    else:
-      # Select best checkpoint from i21k pretraining by final upstream
-      # validation accuracy.
-      df = checkpoint.get_augreg_df(directory=config.pretrained_dir)
-      sel = df.filename.apply(
-          lambda filename: filename.split('-')[0] == model_or_filename)
-      best = df.loc[sel].query('ds=="i21k"').sort_values('final_val').iloc[-1]
-      filename = best.filename
-      logging.info('Selected fillename="%s" for "%s" with final_val=%.3f',
-                   filename, model_or_filename, best.final_val)
-    pretrained_path = os.path.join(config.pretrained_dir,
-                                   f'{config.model.name}.npz')
-  else:
-    # ViT / Mixer papers
-    filename = config.model.name
-
-  pretrained_path = os.path.join(config.pretrained_dir, f'{filename}.npz')
-  if not tf.io.gfile.exists(pretrained_path):
-    raise ValueError(
-        f'Could not find "{pretrained_path}" - you can download models from '
-        '"gs://vit_models/imagenet21k" or directly set '
-        '--config.pretrained_dir="gs://vit_models/imagenet21k".')
-  params = checkpoint.load_pretrained(
-      pretrained_path=pretrained_path,
-      init_params=variables['params'],
-      model_config=config.model)
+  params = variables["params"]
 
   total_steps = config.total_steps
   lr_fn = utils.create_learning_rate_schedule(total_steps, config.base_lr,
@@ -136,13 +111,10 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
 
   update_fn_repl = make_update_fn(
       apply_fn=model.apply, accum_steps=config.accum_steps, lr_fn=lr_fn)
-  infer_fn_repl = jax.pmap(functools.partial(model.apply, train=False))
+  infer_fn_repl = functools.partial(model.apply, train=False)
 
   # Create optimizer and replicate it over all TPUs/GPUs
-  opt = momentum_clip.Optimizer(
-      dtype=config.optim_dtype,
-      grad_norm_clip=config.grad_norm_clip).create(params)
-
+  opt = adam.Adam(weight_decay=0.05, beta1=0.9, beta2=0.95, grad_norm_clip=None).create(params)
   initial_step = 1
   opt, initial_step = flax_checkpoints.restore_checkpoint(
       workdir, (opt, initial_step))
@@ -205,30 +177,26 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
     if ((config.eval_every and step % config.eval_every == 0) or
         (step == total_steps)):
 
-      accuracies = []
+      psnr, ssim = [], []
       lt0 = time.time()
       for test_batch in input_pipeline.prefetch(ds_test, config.prefetch):
-        logits = infer_fn_repl(
-            dict(params=opt_repl.target), test_batch['image'])
-        accuracies.append(
-            (np.argmax(logits,
-                       axis=-1) == np.argmax(test_batch['label'],
-                                             axis=-1)).mean())
-      accuracy_test = np.mean(accuracies)
-      img_sec_core_test = (
-          config.batch_eval * ds_test.cardinality().numpy() /
-          (time.time() - lt0) / jax.device_count())
-      lt0 = time.time()
+        result_image = infer_fn_repl(
+            dict(params=opt_repl.target), test_batch['input_image'])
+        psnr.append(compare_psnr(test_batch["gt_image"], result_image).mean())
+        ssim.append(compare_ssim(test_batch["gt_image"], result_image).mean())
+      
+      psnr_test, ssim_test = np.mean(psnr), np.mean(ssim)
 
+      
       lr = float(lr_fn(step))
       logging.info(f'Step: {step} '  # pylint: disable=logging-format-interpolation
                    f'Learning rate: {lr:.7f}, '
-                   f'Test accuracy: {accuracy_test:0.5f}, '
-                   f'img/sec/core: {img_sec_core_test:.1f}')
+                   f'Test PSNR: {psnr_test:0.5f}, '
+                   f'Test SSIM: {ssim_test:0.5f}, ')
       writer.write_scalars(
           step,
           dict(
-              accuracy_test=accuracy_test,
+              psnr_test = psnr_test, ssim_test = ssim_test,
               lr=lr,
               img_sec_core_test=img_sec_core_test))
 

@@ -26,9 +26,9 @@ import ml_collections
 import numpy as np
 import tensorflow as tf
 
-from vit_jax import checkpoint
-from vit_jax import models
-from vit_jax.configs import models as config_lib
+from nafnet import checkpoint
+from nafnet import models
+from nafnet.configs import models as config_lib
 
 
 def inference_time(config: ml_collections.ConfigDict, workdir: str):

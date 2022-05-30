@@ -20,9 +20,9 @@ import jax
 from ml_collections import config_flags
 import tensorflow as tf
 
-from vit_jax import inference_time
-from vit_jax import train
-from vit_jax import utils
+from nafnet import inference_time
+from nafnet import train
+from nafnet import utils
 
 
 FLAGS = flags.FLAGS
