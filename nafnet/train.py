@@ -34,7 +34,6 @@ from skimage.metrics import structural_similarity as compare_ssim
 from nafnet import checkpoint
 from nafnet import input_pipeline
 from nafnet import models
-from nafnet import momentum_clip
 from nafnet import utils
 
 
