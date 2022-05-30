@@ -6,11 +6,11 @@ Work in Progress...
 
 ## Usage
 
-‘’‘
+'''
 python -m nafnet.main --workdir=./logs \
     --config=$(pwd)/nafnet/configs/config_nafnet.py:w32 \
     --config.base_lr=0.01
-’‘’
+'''
 
 ## Citations
 
