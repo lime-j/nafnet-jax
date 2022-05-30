@@ -44,7 +44,7 @@ def get_config(model_or_filename):
   config.warmup_steps = 10000
   config.pp = ml_collections.ConfigDict()
   config.pp.train = 'train'
-  config.pp.test = 'test'
+  config.pp.test = 'val'
   config.pp.resize = 256
   config.pp.crop = 256
 
