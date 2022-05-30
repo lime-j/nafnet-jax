@@ -44,7 +44,7 @@ def get_config():
   # Batch size for training.
   config.batch = 32
   # Batch size for evaluation.
-  config.batch_eval = 1
+  config.batch_eval = 32
   # Shuffle buffer size.
   config.shuffle_buffer = 50_000
   # Run prediction on validation set every so many steps

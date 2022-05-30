@@ -40,7 +40,6 @@ def get_directory_info(directory, ext='[Pp][Nn][Gg]'):
   """Returns information about directory dataset -- see `get_dataset_info()`."""
   inp_glob = f'{directory}/input_crops/*.{ext}'
   gt_glob = f'{directory}/gt_crops/*.{ext}'
-  print(inp_glob)
   inp_paths = glob.glob(inp_glob)
   gt_paths = glob.glob(gt_glob)
   assert len(inp_paths) == len(gt_paths)
@@ -72,7 +71,6 @@ def get_dataset_info(dataset, split):
 
 def get_datasets(config):
   """Returns `ds_train, ds_test` for specified `config`."""
-  print("dataset", config.dataset)
   train_dir = os.path.join(config.dataset, 'train')
   test_dir = os.path.join(config.dataset, 'val')
   if not os.path.isdir(train_dir):
@@ -153,9 +151,6 @@ def get_data(*,
   def _pp(data):
 
     ipt_im, gt_im = image_decoder(data['input_image']), image_decoder(data["gt_image"])
-    if ipt_im.shape[-1] == 1: im = np.concatenate([im, im, im], axis=-1)
-    if gt_im.shape[-1] == 1: gt_im = np.concatenate([gt_im, gt_im, gt_im], axis=-1)
-
     if mode == 'train':
       channels = ipt_im.shape[-1]
       cropped_ims = tf.image.random_crop(tf.concat([gt_im, ipt_im], axis=-1), size=(image_size, image_size, 6))
@@ -180,7 +175,7 @@ def get_data(*,
                                [num_devices, -1, image_size, image_size, 3])
     return data
     
-  if num_devices is not None and mode == 'train':
+  if num_devices is not None:
     data = data.map(_shard, tf.data.experimental.AUTOTUNE)
   return data
 
@@ -190,6 +185,6 @@ def prefetch(dataset, n_prefetch):
   ds_iter = iter(dataset)
   ds_iter = map(lambda x: jax.tree_map(lambda t: np.asarray(memoryview(t)), x),
                 ds_iter)
-  #if n_prefetch:
-  #  ds_iter = flax.jax_utils.prefetch_to_device(ds_iter, n_prefetch)
+  if n_prefetch:
+   ds_iter = flax.jax_utils.prefetch_to_device(ds_iter, n_prefetch)
   return ds_iter

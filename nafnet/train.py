@@ -99,7 +99,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
         jnp.ones(batch['gt_image'].shape[1:], batch['gt_image'].dtype.name),
         train=False)
 
-  # Use JIT to make sure params reside in CPU memory.
+  # Use JIT to make sure paramss reside in CPU memory.
   variables = jax.jit(init_model, backend='cpu')()
 
   params = variables["params"]
@@ -111,10 +111,10 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
 
   update_fn_repl = make_update_fn(
       apply_fn=model.apply, accum_steps=config.accum_steps, lr_fn=lr_fn)
-  infer_fn_repl = functools.partial(model.apply, train=False)
+  infer_fn_repl = jax.pmap(functools.partial(model.apply, train=False))
 
   # Create optimizer and replicate it over all TPUs/GPUs
-  opt = adam.Adam(weight_decay=0.05, beta1=0.9, beta2=0.95, grad_norm_clip=None).create(params)
+  opt = adam.Adam(weight_decay=0.0005, beta1=0.9, beta2=0.95, grad_norm_clip=None).create(params)
   initial_step = 1
   opt, initial_step = flax_checkpoints.restore_checkpoint(
       workdir, (opt, initial_step))
