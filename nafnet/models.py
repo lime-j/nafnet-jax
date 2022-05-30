@@ -11,21 +11,22 @@
 # limitations under the License.
 
 from typing import Callable, Sequence, TypeVar
-
+import functools
+import einops
 from flax import linen as nn
 import jax.numpy as jnp
-
+import jax
 T = TypeVar('T')
 
 class GlobalAvgPool1D(nn.Module):
     @nn.compact
     def __call__(self, x):
-        return jnp.mean(x, axis=-1)
+        return jnp.mean(x, axis=-1, keepdims=True)
 
 class GlobalAvgPool2D(nn.Module):
     @nn.compact
     def __call__(self, x):
-        return jnp.mean(x, axis=(-3, -2))
+        return jnp.mean(x, axis=(-3, -2), keepdims=True)
 
 
 class SimpleGate(nn.Module):
@@ -38,7 +39,7 @@ class PixelShuffle(nn.Module):
     scale_factor: int
 
     def setup(self):
-        self.layer = partial(
+        self.layer = functools.partial(
             einops.rearrange,
             pattern="b h w (h2 w2 c) -> b (h h2) (w w2) c",
             h2=self.scale_factor,
@@ -53,9 +54,7 @@ class SimpleAttention(nn.Module):
     @nn.compact
     def __call__(self, x) :
         x = GlobalAvgPool2D()(x)
-        x = nn.Conv(self.out_channels, kernel_size=(1, 1), 
-                    strides=(1, 1), use_bias=True, 
-                    padding="SAME")(x)
+        x = nn.Dense(features=self.out_channels)(x)
         return x
         
 class NAFBlock(nn.Module):
@@ -65,10 +64,10 @@ class NAFBlock(nn.Module):
     drop_out_rate : float = 0.
     
     def setup(self):
-        self.dw_channel = c * dw_expand
-        self.ffn_channel = c * ffn_expand
-        self.gamma = self.param('gamma', lambda key, shape, dtype: jnp.zeros(shape, dtype), (1, 1, 1, c), jnp.float32)
-        self.beta = self.param('beta', lambda key, shape, dtype: jnp.zeros(shape, dtype), (1, 1, 1, c), jnp.float32)
+        self.dw_channel = self.c * self.dw_expand
+        self.ffn_channel = self.c * self.ffn_expand
+        self.gamma = self.param('gamma', lambda key, shape, dtype: jnp.zeros(shape, dtype), (1, 1, 1, self.c), jnp.float32)
+        self.beta = self.param('beta', lambda key, shape, dtype: jnp.zeros(shape, dtype), (1, 1, 1, self.c), jnp.float32)
     @nn.compact
     def __call__(self, ipt) :
         
@@ -78,46 +77,49 @@ class NAFBlock(nn.Module):
                     padding='SAME', use_bias = True,
                     feature_group_count=self.dw_channel, name="conv2")(x)
         x = SimpleGate()(x)
-        x = x * SimpleAttention(self.dw_channel // 2)(x)
-        x = nn.Conv(self.dw_channel, kernel_size=(1, 1),
+        scale = SimpleAttention(self.dw_channel // 2)(x)
+        x = x * scale
+        x = nn.Conv(self.c, kernel_size=(1, 1),
                     strides=(1, 1), use_bias=True, name='conv3')(x)   
         y = ipt + x * self.beta
         x = nn.LayerNorm()(y)
-        x = nn.Dense(features=self.c, name="conv4")(x)
+        x = nn.Dense(features=self.ffn_channel, name="conv4")(x)
         x = SimpleGate()(x)
-        x = nn.Dense(features=self.ffn_channel, name="conv5")(x)
+        x = nn.Dense(features=self.c, name="conv5")(x)
         return y + x * self.gamma
 
 
 class NAFNet(nn.Module):
+    enc_blk_nums : list
+    dec_blk_nums : list
     img_channel : int = 3
     width : int = 16 #channels
     middle_blk_num : int = 1
-    enc_blk_nums : Union[Tuple, List] = []
-    dec_blk_nums : Union[Tuple, List] = []
+    name : str = None
+
 
     def setup(self):
-        self.padder_size = 2 ** len(enc_blk_nums) 
+        self.padder_size = 2 ** len(self.enc_blk_nums) 
     @nn.compact
-    def __call__(self, inp) :
-        B, H, W, C = inp.shape
-        mod_pad_h = (self.padder_size - h % self.padder_size) % self.padder_size
-        mod_pad_w = (self.padder_size - w % self.padder_size) % self.padder_size 
-        inp = jnp.pad(inp, ((0, 0), (0, mod_pad_h), (0, mod_pad_w), (0, 0)), mode='constant')
-        x = nn.Conv(self.width, kernel_size=(3, 3), use_bias=True, name='intro')(inp)
+    def __call__(self, inputs, train=True) :
+        B, H, W, C = inputs.shape
+        mod_pad_h = (self.padder_size - H % self.padder_size) % self.padder_size
+        mod_pad_w = (self.padder_size - W % self.padder_size) % self.padder_size 
+        inputs = jnp.pad(inputs, ((0, 0), (0, mod_pad_h), (0, mod_pad_w), (0, 0)), mode='constant')
+        x = nn.Conv(self.width, kernel_size=(3, 3), use_bias=True, name='intro')(inputs)
         encs = []
         chan = self.width
         for blk_nums in self.enc_blk_nums :
             x = nn.Sequential([NAFBlock(chan) for _ in range(blk_nums)])(x)
-            x = nn.Conv(chan * 2, kernel_size=(2, 2), strides=(2, 2))
+            encs.append(x)
+            x = nn.Conv(chan * 2, kernel_size=(2, 2), strides=(2, 2), padding=(0, 0))(x)
             chan = chan * 2
-            encs.append(x)    
         x = nn.Sequential([NAFBlock(chan) for _ in range(self.middle_blk_num)])(x)
-        for blk_nums, enc_skip in zip(self.dec_blk_nums, encs):
+        for blk_nums, enc_skip in zip(self.dec_blk_nums, encs[::-1]):
             x = nn.Sequential([nn.Conv(chan * 2, kernel_size=(1, 1), use_bias=False),
                                PixelShuffle(2)])(x)
             x = x + enc_skip
             chan = chan // 2
             x = nn.Sequential([NAFBlock(chan) for _ in range(blk_nums)])(x)
-        x = inp + nn.Conv(self.img_channel, kernel_size=(3, 3), use_bias=True, name='ending')(x)
-        return jnp.take(x, (B, H, W, C))
+        x = inputs + nn.Conv(self.img_channel, kernel_size=(3, 3), use_bias=True, name='ending')(x)
+        return jax.lax.dynamic_slice(x, (0, 0, 0, 0), (B, H, W, C))

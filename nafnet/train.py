@@ -35,7 +35,7 @@ from nafnet import checkpoint
 from nafnet import input_pipeline
 from nafnet import models
 from nafnet import utils
-
+from nafnet import adam
 
 def make_update_fn(*, apply_fn, accum_steps, lr_fn):
   """Returns update step for data parallel training."""
@@ -89,6 +89,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
 
   model_cls = {'NAFNet': models.NAFNet,
                }[config.get('model_type', 'NAFNet')]
+  print(config.model.keys(), model_cls)
   model = model_cls(**config.model)
 
   def init_model():

@@ -29,7 +29,7 @@ from nafnet.configs import common
 from nafnet.configs import models
 
 
-def get_config(model_or_filename):
+def get_config(model):
   """Returns default parameters for finetuning ViT `model` on `dataset`."""
   config = common.get_config()
 
@@ -47,8 +47,7 @@ def get_config(model_or_filename):
   config.pp.test = 'val'
   config.pp.resize = 256
   config.pp.crop = 256
-
+  config.dataset = '../dataset_unzip/SIDD_Medium_Srgb/'
   # This value MUST be overridden on the command line.
-  config.dataset = ''
 
   return config

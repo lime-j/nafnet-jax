@@ -1,1 +1,5 @@
 .DS_Store
+nafnet/__pycache__/
+nafnet/config/__pycache__
+logs
+*.pyc

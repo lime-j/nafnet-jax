@@ -26,7 +26,7 @@ def get_config():
   # Can be downloaded from gs://vit_models/imagenet21k
   config.pretrained_dir = '.'
 
-  config.dataset = 'SIDD'
+  config.dataset = './dataset_unzip/SIDD_Medium_Srgb/'
   # Path to manually downloaded dataset
   config.tfds_manual_dir = './dataset_unzip/SIDD_Medium_Srgb/'
   # Path to tensorflow_datasets directory
@@ -42,7 +42,7 @@ def get_config():
   config.accum_steps = 1
 
   # Batch size for training.
-  config.batch = 4
+  config.batch = 32
   # Batch size for evaluation.
   config.batch_eval = 1
   # Shuffle buffer size.
