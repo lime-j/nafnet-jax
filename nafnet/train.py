@@ -182,8 +182,14 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
       for test_batch in input_pipeline.prefetch(ds_test, config.prefetch):
         result_image = infer_fn_repl(
             dict(params=opt_repl.target), test_batch['input_image'])
-        psnr.append(compare_psnr(test_batch["gt_image"], result_image).mean())
-        ssim.append(compare_ssim(test_batch["gt_image"], result_image).mean())
+        
+        target, pred = np.array(test_batch["gt_image"]), np.array(result_image)
+        N, _, _, _ = target.shape
+        target = np.split(target, N, axis=0)
+        pred = np.split(pred, N, axis=0)
+        psnr.append(np.array(list(map(lambda tup: compare_psnr(tup[0], tup[1]), tuple(zip(target, pred))).mean())))
+        ssim.append(np.array(list(map(lambda tup: compare_ssim(tup[0], tup[1]), tuple(zip(target, pred))).mean())))
+        #(compare_ssim(test_batch["gt_image"], result_image).mean())
       
       psnr_test, ssim_test = np.mean(psnr), np.mean(ssim)
 
