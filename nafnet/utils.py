@@ -58,6 +58,7 @@ def create_learning_rate_schedule(total_steps,
                                   base,
                                   decay_type,
                                   warmup_steps,
+                                  min_lr=1e-7,
                                   linear_end=1e-5):
   """Creates learning rate schedule.
 
@@ -84,7 +85,7 @@ def create_learning_rate_schedule(total_steps,
     if decay_type == 'linear':
       lr = linear_end + (lr - linear_end) * (1.0 - progress)
     elif decay_type == 'cosine':
-      lr = lr * 0.5 * (1. + jnp.cos(jnp.pi * progress))
+      lr = min_lr + (lr - min_lr) * 0.5 * (1. + jnp.cos(jnp.pi * progress))
     else:
       raise ValueError(f'Unknown lr type {decay_type}')
 

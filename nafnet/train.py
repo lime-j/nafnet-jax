@@ -38,6 +38,7 @@ from nafnet import models
 from nafnet import utils
 from nafnet import adam
 from nafnet.metrics import calculate_psnr, calculate_ssim
+from nafnet.metrics.metric_util import tensor2img
 
 def make_update_fn(*, apply_fn, accum_steps, lr_fn):
   """Returns update step for data parallel training."""
@@ -179,6 +180,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
 
       psnr, ssim = [], []
       lt0 = time.time()
+      
       for test_batch in input_pipeline.prefetch(ds_test, config.prefetch):
         result_image = infer_fn_repl(
             dict(params=opt_repl.target), test_batch['input_image'])

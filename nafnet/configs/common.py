@@ -48,11 +48,11 @@ def get_config():
   # Shuffle buffer size.
   config.shuffle_buffer = 50_000
   # Run prediction on validation set every so many steps
-  config.eval_every = 1_000
+  config.eval_every = 10_000
   # Log progress every so many steps.
-  config.progress_every = 1_0000
+  config.progress_every = 10_0000
   # How often to write checkpoints. Specifying 0 disables checkpointing.
-  config.checkpoint_every = 1_000
+  config.checkpoint_every = 10_000
 
   # Number of batches to prefetch to device.
   config.prefetch = 2

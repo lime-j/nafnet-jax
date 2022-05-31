@@ -5,6 +5,40 @@
 # Copyright 2018-2020 BasicSR Authors
 # ------------------------------------------------------------------------
 import numpy as np
+import cv2
+def tensor2img(tensor, rgb2bgr=False, out_type=np.uint8, min_max=(0, 1)):
+    """Convert torch Tensors into image numpy arrays.
+    After clamping to [min, max], values will be normalized to [0, 1].
+    Args:
+        tensor (Tensor or list[Tensor]): Accept shapes:
+            1) 3D Tensor of shape (3 x H x W);
+        rgb2bgr (bool): Whether to change rgb to bgr.
+        out_type (numpy type): output types. If ``np.uint8``, transform outputs
+            to uint8 type with range [0, 255]; otherwise, float type with
+            range [0, 1]. Default: ``np.uint8``.
+        min_max (tuple[int]): min and max values for clamp.
+    Returns:
+        (Tensor or list): 3D ndarray of shape (H x W x C) OR 2D ndarray of
+        shape (H x W). The channel order is BGR.
+    """
+
+
+    _tensor = tensor.clip(*min_max)
+    _tensor = (_tensor - min_max[0]) / (min_max[1] - min_max[0])
+    assert len(_tensor.shape) == 3
+    img_np = _tensor
+    img_np = img_np.transpose(1, 2, 0)
+    if img_np.shape[2] == 1:  # gray image
+        img_np = np.squeeze(img_np, axis=2)
+    elif img_np.shape[2] == 3:
+        if rgb2bgr:
+            img_np = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
+    if out_type == np.uint8:
+        # Unlike MATLAB, numpy.unit8() WILL NOT round by default.
+        img_np = (img_np * 255.0).round()
+    img_np = img_np.astype(out_type)
+    result.append(img_np)
+    return result
 
 def _convert_output_type_range(img, dst_type):
     """Convert the type and range of the image according to dst_type.
