@@ -28,14 +28,16 @@ import numpy as np
 import tensorflow as tf
 
 from skimage.metrics import mean_squared_error as compare_mse
-from skimage.metrics import peak_signal_noise_ratio as compare_psnr
-from skimage.metrics import structural_similarity as compare_ssim
+
+
+
 
 from nafnet import checkpoint
 from nafnet import input_pipeline
 from nafnet import models
 from nafnet import utils
 from nafnet import adam
+from nafnet.metrics import calculate_psnr, calculate_ssim
 
 def make_update_fn(*, apply_fn, accum_steps, lr_fn):
   """Returns update step for data parallel training."""
@@ -52,8 +54,6 @@ def make_update_fn(*, apply_fn, accum_steps, lr_fn):
     def l1_loss(predictions: jnp.ndarray, targets: jnp.ndarray) -> jnp.ndarray:
       return jnp.mean(jnp.abs(targets - predictions))
     
-    def psnr_loss(predictions: jnp.ndarray, targets: jnp.ndarray) -> jnp.ndarray:
-      return 10 * jnp.log10(1 / l2_loss(predictions, targets))
     
     def loss_fn(params, images, gt_images):
       result_image = apply_fn(
@@ -183,12 +183,15 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
         result_image = infer_fn_repl(
             dict(params=opt_repl.target), test_batch['input_image'])
         
-        target, pred = np.array(test_batch["gt_image"]), np.array(result_image)
+        target, pred = np.array(test_batch["gt_image"] * 255, dtype=np.uint8), np.array(result_image * 255, dtype=np.uint8)
+
+        pred = pred.reshape(-1, pred.shape[-3], pred.shape[-2], pred.shape[-1])
+        target = target.reshape(-1, target.shape[-3], target.shape[-2], target.shape[-1])
         N, _, _, _ = target.shape
         target = np.split(target, N, axis=0)
         pred = np.split(pred, N, axis=0)
-        psnr.append(np.array(list(map(lambda tup: compare_psnr(tup[0], tup[1]), tuple(zip(target, pred))).mean())))
-        ssim.append(np.array(list(map(lambda tup: compare_ssim(tup[0], tup[1]), tuple(zip(target, pred))).mean())))
+        psnr.append(np.array(list(map(lambda tup: calculate_psnr(tup[0][0,...], tup[1][0, ...], crop_border=0, test_y_channel=False), tuple(zip(target, pred))))).mean())
+        ssim.append(np.array(list(map(lambda tup: calculate_ssim(tup[0][0,...], tup[1][0, ...], crop_border=0, test_y_channel=False), tuple(zip(target, pred))))).mean())
         #(compare_ssim(test_batch["gt_image"], result_image).mean())
       
       psnr_test, ssim_test = np.mean(psnr), np.mean(ssim)
@@ -203,8 +206,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
           step,
           dict(
               psnr_test = psnr_test, ssim_test = ssim_test,
-              lr=lr,
-              img_sec_core_test=img_sec_core_test))
+              lr=lr))
 
     # Store checkpoint.
     if ((config.checkpoint_every and step % config.eval_every == 0) or
