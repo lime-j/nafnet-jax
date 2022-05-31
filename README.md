@@ -2,7 +2,9 @@
 
 A Jax / Flax impl of the paper "Simple Baselines for Image Restoration"
 
-Work in Progress...
+This impl is heavyily based on the GitHub repo of [vision-transformer](https://github.com/google-research/vision_transformer) 
+\& the original PyTorch impl [NAFNet](https://github.com/megvii-research/NAFNet).
+
 
 ## Usage
 
