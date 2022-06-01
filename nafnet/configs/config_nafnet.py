@@ -40,7 +40,7 @@ def get_config(model):
 
   # These values are often overridden on the command line.
   config.base_lr = 1e-3
-  config.total_steps = 200000
+  config.total_steps = 400000
   config.warmup_steps = 0
   config.pp = ml_collections.ConfigDict()
   config.pp.train = 'train'

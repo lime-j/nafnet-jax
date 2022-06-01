@@ -16,6 +16,7 @@ import functools
 import os
 import time
 
+import math
 from absl import logging
 from clu import metric_writers
 from clu import periodic_actions
@@ -55,6 +56,9 @@ def make_update_fn(*, apply_fn, accum_steps, lr_fn):
     def l1_loss(predictions: jnp.ndarray, targets: jnp.ndarray) -> jnp.ndarray:
       return jnp.mean(jnp.abs(targets - predictions))
     
+    def psnr_loss(predictions : jnp.ndarray, targets: jnp.ndarray) -> jnp.ndarray:
+      scale = 10 / np.log(10)
+      return scale * jnp.log((((predictions - targets) ** 2).mean(axis=(1, 2, 3)) + 1e-8).mean())
     
     def loss_fn(params, images, gt_images):
       result_image = apply_fn(
@@ -63,7 +67,7 @@ def make_update_fn(*, apply_fn, accum_steps, lr_fn):
           inputs=images,
           train=True)
       
-      return l1_loss(result_image, gt_images)
+      return psnr_loss(result_image, gt_images)
 
     l, g = utils.accumulate_gradient(
         jax.value_and_grad(loss_fn), opt.target, batch['input_image'], batch['gt_image'],
@@ -115,7 +119,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
   infer_fn_repl = jax.pmap(functools.partial(model.apply, train=False))
 
   # Create optimizer and replicate it over all TPUs/GPUs
-  opt = adam.Adam(weight_decay=0.0005, beta1=0.9, beta2=0.95, grad_norm_clip=None).create(params)
+  opt = adam.Adam(weight_decay=0.0, beta1=0.9, beta2=0.9, grad_norm_clip=None).create(params)
   initial_step = 1
   opt, initial_step = flax_checkpoints.restore_checkpoint(
       workdir, (opt, initial_step))

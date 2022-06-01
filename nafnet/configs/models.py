@@ -52,5 +52,4 @@ def get_w64_config():
   config.middle_blk_num = 12
   config.enc_blk_nums = [2, 2, 4, 8]
   config.dec_blk_nums = [2, 2, 2, 2]
-
   return config

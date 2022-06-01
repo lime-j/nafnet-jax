@@ -55,7 +55,7 @@ def get_config():
   config.checkpoint_every = 10_000
 
   # Number of batches to prefetch to device.
-  config.prefetch = 2
+  config.prefetch = 0
 
   # Base learning-rate for fine-tuning.
   config.base_lr = 0.03
@@ -81,7 +81,7 @@ def get_config():
 # We leave out a subset of training for validation purposes (if needed).
 DATASET_PRESETS = {
     'SIDD': ml_collections.ConfigDict(
-        {'total_steps': 200_000,
+        {'total_steps': 400_000,
          'pp': ml_collections.ConfigDict(
              {'train': 'train',
               'test': 'test',
