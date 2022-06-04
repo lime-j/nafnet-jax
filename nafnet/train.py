@@ -60,6 +60,7 @@ def make_update_fn(*, apply_fn, accum_steps, lr_fn):
       scale = 10 / np.log(10)
       return scale * jnp.log((((predictions - targets) ** 2).mean(axis=(1, 2, 3)) + 1e-8).mean())
     
+    
     def loss_fn(params, images, gt_images):
       result_image = apply_fn(
           dict(params=params),
@@ -67,7 +68,7 @@ def make_update_fn(*, apply_fn, accum_steps, lr_fn):
           inputs=images,
           train=True)
       
-      return psnr_loss(result_image, gt_images)
+      return l1_loss(result_image, gt_images)
 
     l, g = utils.accumulate_gradient(
         jax.value_and_grad(loss_fn), opt.target, batch['input_image'], batch['gt_image'],

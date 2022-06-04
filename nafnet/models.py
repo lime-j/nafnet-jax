@@ -72,7 +72,8 @@ class NAFBlock(nn.Module):
     def __call__(self, ipt) :
         
         x = nn.LayerNorm()(ipt)
-        x = nn.Dense(features=self.dw_channel, name="conv1")(x)
+        x = nn.Conv(features=self.dw_channel, kernel_size=(1,1), padding=(0,0),
+                    use_bias=True, name="conv1")(x)
         x = nn.Conv(features=self.dw_channel, kernel_size=(3, 3), 
                     padding='SAME', use_bias = True,
                     feature_group_count=self.dw_channel, name="conv2")(x)
@@ -83,9 +84,11 @@ class NAFBlock(nn.Module):
                     strides=(1, 1), use_bias=True, name='conv3')(x)   
         y = ipt + x * self.beta
         x = nn.LayerNorm()(y)
-        x = nn.Dense(features=self.ffn_channel, name="conv4")(x)
+        x = nn.Conv(self.ffn_channel, kernel_size=(1, 1), padding=(0,0), use_bias=True,
+                    name="conv4")(x)
         x = SimpleGate()(x)
-        x = nn.Dense(features=self.c, name="conv5")(x)
+        x = nn.Conv(self.c, kernel_size=(1, 1), padding=(0,0), 
+                    use_bias=True, name="conv5")(x) 
         return y + x * self.gamma
 
 
